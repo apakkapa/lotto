@@ -15,5 +15,5 @@ python ahwindelotto.py
 
 # Overview
 
-**ahwindelotto.py** opens the url at [NLCB Lotto Plus](http://www.nlcbplaywhelotto.com/nlcb-lotto-plus-results) and reads the results for a given **lotto draw #**. It compares the **winning numbers** with the **user input number** and indicates which of the user numbers match and which don't
+**ahwindelotto.py** opens the url at [NLCB Lotto Plus](http://www.nlcbplaywhelotto.com/nlcb-lotto-plus-results) and reads the results for a given **lotto draw #**. It compares the **winning numbers** with the **user input numbers** and indicates which of the user numbers match and which don't
 
