@@ -11,7 +11,7 @@ python ahwindelotto.py
 # Requirements
 * [Python Interpreter](https://www.python.org/downloads/)
 * [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
-* [Requests] (https://requests.readthedocs.io/en/master/)
+* [Requests](https://requests.readthedocs.io/en/master/)
 
 # Overview
 
