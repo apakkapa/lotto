@@ -21,9 +21,22 @@ CHECK_MARK = u'\u2713'
 def main():
     drawnumber = get_draw()
     my_numbers = get_my_numbers()
-    # print(my_numbers)
-    query = QUERY_STR.format(drawnumber)
 
+    winning_numbers = scrape_site_for_numbers(QUERY_STR.format(drawnumber))
+
+    win_dict = check(winning_numbers, my_numbers)
+    # print(win_dict)
+    won = False not in win_dict.values()
+
+    if won:
+        print('you won')
+    else:
+        print('you did not win')
+
+    show_nos_won(my_numbers, win_dict, winning_numbers)
+
+
+def scrape_site_for_numbers(query):
     response = requests.get(query)
     # response = '<Response object with lots of goodies, including a website's text>'
 
@@ -36,18 +49,8 @@ def main():
     winning_numbers = [number.text for number in numbers]
     powerball = soup.find('div', {"class": "ball yellow-ball"}).text
     winning_numbers.append('P' + powerball)
-    # print(winning_numbers)
 
-    win_dict = check(winning_numbers, my_numbers)
-    # print(win_dict)
-    won = False not in win_dict.values()
-
-    if won:
-        print('you won')
-    else:
-        print('you did not win')
-
-    show_nos_won(my_numbers, win_dict, winning_numbers)
+    return winning_numbers
 
 
 def show_nos_won(my_numbers, win_dict, winning_numbers):
