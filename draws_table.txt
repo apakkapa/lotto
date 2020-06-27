@@ -1,0 +1,11 @@
+CREATE TABLE draws (
+    draw_no INTEGER NOT NULL PRIMARY KEY,
+    draw_date DATE NOT NULL,
+    draw_jackpot FLOAT NOT NULL,
+    draw_winners INTEGER NOT NULL,
+    ball_1 INTEGER NOT NULL,
+    ball_2 INTEGER NOT NULL,
+    ball_3 INTEGER NOT NULL,
+    ball_4 INTEGER NOT NULL,
+    ball_5 INTEGER NOT NULL,
+    power_ball INTEGER NOT NULL);
