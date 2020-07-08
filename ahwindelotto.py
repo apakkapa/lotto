@@ -3,15 +3,17 @@ usage:
     python ahwindelotto.py
 
     tells user if lotto won
-    given the draw number
-    and the number chosen
+    given the draw_number
+    and the numbers chosen
 
 overview:
-
 """
+
 from bs4 import BeautifulSoup
 import requests
 import sqlite3
+import datetime
+import sys
 
 MAX_LOTTO_NUM = 36
 QUERY_STR = 'http://www.nlcbplaywhelotto.com/nlcb-lotto-plus-results/?drawnumber={}'
@@ -21,20 +23,27 @@ DB_CONN = 'lotto_numbers.db'  # lotto numbers stored in a database
 
 
 def main():
-    drawnumber = get_draw()
+    if len(sys.argv) > 1:
+        print('adding data')
+        no = int(sys.argv[1])
+        scrape_and_add(no)
+        return None
+
+    draw_number = get_draw()
     my_numbers = get_my_numbers()
 
     """
     1st, check the database to see whether draw exist - return numbers if it does
     otherwise, scrape site for winning numbers, adding these if they exist
     """
-    winning_numbers = database_has_draw(drawnumber)
+    winning_numbers, draw_date, draw_jackpot, no_of_winners = database_has_draw(draw_number)
+
     if not winning_numbers:  # not found in db, so scrape the web, and add numbers found
         print('scraping the web...')
-        winning_numbers = scrape_site_for_numbers(QUERY_STR.format(drawnumber))
-        winning_numbers_2 = scrape_site_for_numbers_2(QUERY_STR.format(drawnumber))
-        print(winning_numbers_2)
-        add_numbers_to_db(drawnumber, winning_numbers)
+        # winning_numbers = scrape_site_for_numbers(QUERY_STR.format(draw_number))
+        winning_numbers, draw_date, draw_jackpot, no_of_winners = scrape_site_for_numbers(QUERY_STR.format(draw_number))
+        # return winning_numbers, draw_date.text, jackpot.text, no_of_winners.text
+        add_numbers_to_db(draw_number, winning_numbers, draw_date, draw_jackpot, no_of_winners)
 
     win_dict = check(winning_numbers, my_numbers)
     # print(win_dict)
@@ -45,48 +54,56 @@ def main():
     else:
         print('you did not win')
 
-    show_nos_won(my_numbers, win_dict, winning_numbers)
+    show_nos_won(my_numbers, win_dict, winning_numbers, draw_number, draw_date, draw_jackpot, no_of_winners)
+
+
+def scrape_and_add(start_no):
+    for draw_no in range(start_no, 1952):
+        query = QUERY_STR.format(draw_no)
+        winning_numbers_2, draw_date, draw_jackpot, no_of_winners = scrape_site_for_numbers(query)
+        print(winning_numbers_2, draw_date, draw_jackpot, no_of_winners)
+        add_numbers_to_db(draw_no, winning_numbers_2, draw_date, draw_jackpot, no_of_winners)
 
 
 def scrape_site_for_numbers(query):
+    def after_colon(s):
+        colon_pos = s.find(':')
+        return s[colon_pos + 1:]
+
+    def actual_value(var, var_type, default):
+        if var and hasattr(var, var_type):
+            return after_colon(var.text)
+        else:
+            return default
+
+
     response = requests.get(query)
     # response = '<Response object with lots of goodies, including a website's text>'
 
     html = response.text
 
-    soup = BeautifulSoup(html, 'lxml')
-    # draw_date = soup.find('div', 'drawDetails').div.text
-    # jackpot = soup.find(id='jackpot').text
+    soup = BeautifulSoup(html, 'html.parser')
+    draw_date = soup.find('div', {'class': 'drawDetails'}).div
+    draw_date_s = actual_value(draw_date, 'text', '1-Jan-01')
+
     numbers = soup.find_all("div", {"class": "lotto-balls"})
     winning_numbers = [number.text for number in numbers]
-    powerball = soup.find('div', {"class": "ball yellow-ball"}).text
-    winning_numbers.append('P' + powerball)
-
-    return winning_numbers
-
-
-def scrape_site_for_numbers_2(query):
-    response = requests.get(query)
-    # response = '<Response object with lots of goodies, including a website's text>'
-
-    html = response.text
-
-    soup = BeautifulSoup(html, 'lxml')
-    draw_date = soup.find('div', 'drawDetails').div
-    # jackpot = soup.find(id='jackpot').text
-    numbers = soup.find_all("div", {"class": "lotto-balls"})
-    winning_numbers = [number.text for number in numbers]
-    powerball = soup.find('div', {"class": "ball yellow-ball"})
-    parent = powerball.parent
+    power_ball = soup.find('div', {"class": "ball yellow-ball"})
+    parent = power_ball.parent
     new_line = parent.next_sibling
+
+    #  the jackpot may or may not be there
     jackpot = new_line.next_sibling
     no_of_winners = jackpot.next_sibling
-    winning_numbers.append('P' + powerball.text)
+    jackpot_s = actual_value(jackpot, 'text', 0)
+    no_of_winners_s = actual_value(no_of_winners, 'text', 0)
 
-    return winning_numbers, draw_date.text, jackpot.text, no_of_winners.text
+    winning_numbers.append('P' + power_ball.text)
+    return winning_numbers, draw_date_s, jackpot_s, no_of_winners_s
 
 
-def show_nos_won(my_numbers, win_dict, winning_numbers):
+def show_nos_won(my_numbers, win_dict, winning_numbers, draw_number, draw_date, jackpot, no_of_winners):
+    print('{}: {} Jackpot:{} No. of winners({})'.format(draw_number, draw_date, jackpot, no_of_winners))
     print('{:<20}'.format('Winning numbers'), end='')
     for number in winning_numbers:
         print('{:>2} '.format(number), end='')
@@ -106,32 +123,75 @@ def show_nos_won(my_numbers, win_dict, winning_numbers):
     print()
 
 
-def database_has_draw(drawnumber):
-    """
-    returns winning_number as list if found
-    otherwise returns empty list
-    """
+def database_has_draw(draw_number):
+    """ returns winning_number as list if found
+    otherwise returns empty list """
     winning_numbers = []
     conn = sqlite3.connect(DB_CONN)
-    results = conn.execute('select draw_numer, ball_1, ball_2, ball_3, ball_4, ball_5, power_ball from draw_numbers where draw_numer = {}'.format(drawnumber))
+    draw_date, draw_jackpot, draw_winners = None, None, None
+    results = conn.execute("""select draw_no,
+                            ball_1,
+                            ball_2,
+                            ball_3,
+                            ball_4,
+                            ball_5,
+                            power_ball,
+                            draw_date,
+                            draw_jackpot,
+                            draw_winners
+                            from draws
+                            where draw_no = ?""", (draw_number,))
+
     for cursor in results:
-        winning_numbers = list(cursor[1:])
+        winning_numbers = list(cursor[1:7])
         winning_numbers[5] = 'P' + str(winning_numbers[5])
+        draw_date = cursor[7]
+        draw_jackpot = cursor[8]
+        draw_winners = cursor[9]
 
     conn.close()
 
     winning_numbers = [str(number) for number in winning_numbers]
 
-    return winning_numbers
+    return winning_numbers, draw_date, draw_jackpot, draw_winners
 
 
-def add_numbers_to_db(drawnumber, winning_numbers):
+def add_numbers_to_db(draw_number, winning_numbers, draw_date, jackpot, no_of_winners):
     """
-    add drawnumber and winning_numbers to db
+    add draw_number and winning_numbers to db
     """
+
+    def strip_chars(s, chars):
+        for ch in chars:
+            s = s.replace(ch, '')
+        return s
+
+    plain_jackpot = strip_chars(jackpot, '$,')
+    draw_d = datetime.datetime.strptime(draw_date, '%d-%b-%y')
+    draw_c = draw_d.strftime('%Y%m%d')
     conn = sqlite3.connect(DB_CONN)
-    exec_str = 'insert into draw_numbers (draw_numer, ball_1, ball_2, ball_3, ball_4, ball_5, power_ball) values ({}, {}, {}, {}, {}, {}, {})'.format(drawnumber, winning_numbers[0], winning_numbers[1], winning_numbers[2], winning_numbers[3], winning_numbers[4], winning_numbers[5].replace('P', ''))
-    print(exec_str)
+    exec_str = """insert into draws
+                        (draw_no,
+                        ball_1,
+                        ball_2,
+                        ball_3,
+                        ball_4,
+                        ball_5,
+                        power_ball,
+                        draw_date,
+                        draw_jackpot,
+                        draw_winners)
+                    values ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})""".format(draw_number,
+                                                                              winning_numbers[0],
+                                                                              winning_numbers[1],
+                                                                              winning_numbers[2],
+                                                                              winning_numbers[3],
+                                                                              winning_numbers[4],
+                                                                              winning_numbers[5].replace('P', ''),
+                                                                              draw_c,
+                                                                              plain_jackpot,  # jackpot,
+                                                                              no_of_winners)
+    #  print(exec_str)
     conn.execute(exec_str)
     conn.commit()
     conn.close()
@@ -151,7 +211,7 @@ def get_draw():
 
 
 def get_my_numbers():
-    return input('Enter your numbers: ').split(' ')
+    return input('Enter your numbers: ').upper().split(' ')
 
 
 if __name__ == '__main__':
